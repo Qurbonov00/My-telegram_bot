@@ -1,0 +1,127 @@
+import sqlite3
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+
+# ============ НАСТРОЙКА ============ #
+TOKEN = "ТУ_ТОКЕН_БОТРО_ИНҶО_МОН"
+ADMIN_ID = 6450702108  # айди ту (админ)
+RATE = 50  # 50 алмос = 1 рубл
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher(bot)
+
+# ============ БАЗА ============ #
+conn = sqlite3.connect("users.db", check_same_thread=False)
+cur = conn.cursor()
+
+cur.execute("""CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    balance INTEGER DEFAULT 0,
+    invited_by INTEGER,
+    language TEXT DEFAULT 'tj'
+)""")
+conn.commit()
+
+# ============ МЕНЮ ============ #
+def main_menu(lang="tj"):
+    if lang == "ru":
+        buttons = ["💰 Баланс", "👥 Пригласить друзей", "💎 Вывод"]
+    elif lang == "en":
+        buttons = ["💰 Balance", "👥 Invite Friends", "💎 Withdraw"]
+    else:
+        buttons = ["💰 Баланс", "👥 Даъвати дӯстон", "💎 Барориши пул"]
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(*buttons)
+    return kb
+
+def withdraw_menu(lang="tj"):
+    names = ["Payeer", "Tonkeeper", "Bybit", "Binance", "Alif Bank", "Dushanbe City", "📞 Номер телефон", "🔙 Назад"]
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add(*names)
+    return kb
+
+# ============ START ============ #
+@dp.message_handler(commands=['start'])
+async def start_cmd(msg: types.Message):
+    uid = msg.from_user.id
+    ref = None
+    if " " in msg.text:
+        ref = msg.text.split(" ")[1]
+
+    cur.execute("SELECT * FROM users WHERE user_id=?", (uid,))
+    user = cur.fetchone()
+    if not user:
+        cur.execute("INSERT INTO users (user_id, invited_by) VALUES (?,?)", (uid, ref))
+        conn.commit()
+        if ref:
+            cur.execute("UPDATE users SET balance = balance + 50 WHERE user_id=?", (ref,))
+            conn.commit()
+            await bot.send_message(ref, "🎁 Шумо 50 алмос гирифтед барои даъвати дӯсти нав!")
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("🇹🇯 Тоҷикӣ", "🇷🇺 Русский", "🇬🇧 English")
+    await msg.answer("🌐 Забонро интихоб кунед:", reply_markup=kb)
+
+# ============ ИНТИХОБИ ЗАБОН ============ #
+@dp.message_handler(lambda m: m.text in ["🇹🇯 Тоҷикӣ", "🇷🇺 Русский", "🇬🇧 English"])
+async def set_lang(msg: types.Message):
+    lang_map = {"🇹🇯 Тоҷикӣ": "tj", "🇷🇺 Русский": "ru", "🇬🇧 English": "en"}
+    lang = lang_map[msg.text]
+    cur.execute("UPDATE users SET language=? WHERE user_id=?", (lang, msg.from_user.id))
+    conn.commit()
+    await msg.answer("✅ Забон интихоб шуд!", reply_markup=main_menu(lang))
+
+# ============ БАЛАНС ============ #
+@dp.message_handler(lambda m: "Баланс" in m.text or "Balance" in m.text)
+async def show_balance(msg: types.Message):
+    cur.execute("SELECT balance, language FROM users WHERE user_id=?", (msg.from_user.id,))
+    row = cur.fetchone()
+    bal, lang = row
+    rub = bal / RATE
+    text = f"💎 {bal} алмос = 💸 {rub} рубл"
+    await msg.answer(text)
+
+# ============ ДАЪВАТИ ДӮСТОН ============ #
+@dp.message_handler(lambda m: "дӯстон" in m.text or "друзей" in m.text or "Friends" in m.text)
+async def invite(msg: types.Message):
+    link = f"https://t.me/Oplat_a_bot?start={msg.from_user.id}"
+    await msg.answer(f"👥 Силкаи даъвати шумо:\n{link}")
+
+# ============ ВЫВОД ============ #
+@dp.message_handler(lambda m: "Вывод" in m.text or "Withdraw" in m.text or "Барориши" in m.text)
+async def withdraw(msg: types.Message):
+    cur.execute("SELECT language FROM users WHERE user_id=?", (msg.from_user.id,))
+    lang = cur.fetchone()[0]
+    await msg.answer("💡 50 алмос = 1 рубл.\nБарои гирифтани пул система интихоб кунед:", reply_markup=withdraw_menu(lang))
+
+@dp.message_handler(lambda m: m.text in ["Payeer", "Tonkeeper", "Bybit", "Binance", "Alif Bank", "Dushanbe City", "📞 Номер телефон"])
+async def ask_wallet(msg: types.Message):
+    cur.execute("UPDATE users SET language=language WHERE user_id=?", (msg.from_user.id,))
+    conn.commit()
+    await msg.answer(f"📨 Лутфан {msg.text}-адреси худро нависед:")
+    dp.register_message_handler(get_wallet, state="wait_wallet", pass_user_data=True)
+
+async def get_wallet(msg: types.Message):
+    wallet = msg.text
+    cur.execute("UPDATE users SET language=language WHERE user_id=?", (msg.from_user.id,))
+    conn.commit()
+    await msg.answer("🔢 Чанд алмос мехоҳед бароред?")
+    dp.register_message_handler(lambda m: process_withdraw(m, wallet), state="wait_amount", pass_user_data=True)
+
+async def process_withdraw(msg: types.Message, wallet):
+    amount = int(msg.text)
+    uid = msg.from_user.id
+    cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+    bal = cur.fetchone()[0]
+    if amount > bal:
+        await msg.answer("❌ Шумо ин қадар алмос надоред!")
+        return
+    cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=?", (amount, uid))
+    conn.commit()
+    rub = amount / RATE
+    await msg.answer(f"✅ Дархости шумо қабул шуд!\n{amount} алмос = {rub} рубл.\nАдминистратор онро тасдиқ мекунад.")
+    await bot.send_message(ADMIN_ID, f"🧾 Дархости нав аз @{msg.from_user.username}\nID: {uid}\n{amount} алмос = {rub} рубл\nАдрес: {wallet}")
+
+# ============ RUN ============ #
+if __name__ == "__main__":
+    print("Бот кор мекунад...")
+    executor.start_polling(dp)
