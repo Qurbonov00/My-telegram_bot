@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RACE TJ — Мусобиқа бо бот</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="ui">
+    <h1>RACE TJ</h1>
+    <div class="controls">
+      <label>Шумораи ботҳо:
+        <select id="botCount">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+      <label>Лента/Лап (laps):
+        <select id="laps">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <button id="startBtn">Оғоз кардан</button>
+      <button id="restartBtn" disabled>Бозоғоз</button>
+    </div>
+
+    <div id="info">
+      <div>Назорат: ← ва → барои ҳаракат, Space — тезтар</div>
+      <div id="status">Ҳолат: омодагӣ</div>
+    </div>
+  </div>
+
+  <canvas id="game" width="800" height="600"></canvas>
+
+  <div id
